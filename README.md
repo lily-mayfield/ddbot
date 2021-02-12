@@ -1,6 +1,8 @@
 # ddbot
 
-Direct Democracy Bot
+Direct Democracy Bot (Discord)
+
+Flask frontend
 
 ## Setup
 

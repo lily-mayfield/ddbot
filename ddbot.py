@@ -9,6 +9,8 @@ from functools import partial
 
 import discord
 
+from . import models
+
 TOKEN = os.environ.get('DDBOT_DISCORD_TOKEN')
 QUORUM = 2
 
@@ -21,9 +23,26 @@ passed_votes = []
 failed_votes = []
 
 
+# NOTE: vote key will be the id of proposal
+def create_proposal(server_name: str, channel_name: str, text: str, choice_strings: list) -> int:
+    proposal = models.Proposal(
+        server_name=server_name,
+        channel_name=channel_name,
+        text=text,
+        choices=[models.Choice(text=t) for t in choice_strings],
+    )
+    db.session.add(proposal)
+    db.session.commit()
+
+    return proposal.id
+
+
+def cast_vote():
+    vote = models.Vote(choice_id=lol, username_hash=lol)
+
+
 async def announce_vote_results(channel: discord.Channel, vote_key: str):
     await asyncio.sleep(15)
-    print('lol')
     # was quorum met?
     if sum(vote_db[vote_key]) < QUORUM:
         await client.send_message(channel, vote_key + ' did not reach quorum! totals: %s' % vote_db[vote_key])
@@ -93,31 +112,33 @@ async def on_message(message):
         vote_db[vote_key][vote_option] += 1
     elif message.content.startswith('!propose'):
         arguments = message_to_arguments(message.content)
-        vote_key = arguments['arguments'][0]
-        vote_text = arguments['arguments'][1]
-        vote_options = arguments['arguments'][2:]
-        option_text = ', '.join(['%d: %s' % (i,a) for i,a in enumerate(vote_options)])
-
-        # add vote to vote db
-        if vote_key not in vote_db:
-            vote_db[vote_key] = [0 for option in vote_options]
-        else:
-            await client.send_message(message.channel, "Vote key duplicate: %s" % vote_key)
-            return
-
-        #msg = 'Hello {0.author.mention}'.format(message)
-        msg = (
-            'VOTING TIME!\n\nProposal: %s (vote key: %s)\n\nOptions: %s'
-            % (vote_text, vote_key, option_text)
-        )
-        print(message.channel)
+        vote_text = arguments['arguments'][0]
+        vote_options = arguments['arguments'][1:]
 
         if not arguments['channel']:
             return
 
+        # FIXME: this should be from repr of proposal?
+        option_text = ', '.join(['%d: %s' % (i,a) for i,a in enumerate(vote_options)])
+
+        new_proposal_id = create_proposal(
+            server_name=arguments['server'].name,
+            channel_name=arguments['channel'].name,
+            text=vote_text,
+            choice_strings=vote_options,
+        )
+
+        #msg = 'Hello {0.author.mention}'.format(message)
+        msg = (
+            'VOTING TIME!\n\nProposal: %s (vote key: %d)\n\nOptions: %s'
+            % (vote_text, new_proposal_id, option_text)
+        )
+
+
         await client.send_message(arguments['channel'], msg)
         announce_this_votes_results = partial(announce_vote_results, arguments['channel'], vote_key)
         await announce_this_votes_results()
+
 
 @client.event
 async def on_ready():
@@ -125,5 +146,6 @@ async def on_ready():
     print(client.user.name)
     print(client.user.id)
     print('------')
+
 
 client.run(TOKEN)
